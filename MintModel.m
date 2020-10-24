@@ -1,5 +1,30 @@
-function [v, v_shaped, v_posed, rot_J_global] = MintModel(Core, beta, theta, Shape_Para, Exp_Para)
+function v = MintModel(Core, beta, theta, Shape_Para, Exp_Para)
+    % Parameterized 3D Human Model, Face (3DMM) + Body(SMPL)
+    % Control as a 3DMM or SMPL, Individually
+    % v(output): Changed Vertices
+    % Core: Structure of Mint Model.
+    % Please check the Readme file for more details about Core variables
+    % beta: Shape Parameter for Body(SMPL), must be 10x1 Size
+    % theta: Pose Parameter for Body(SMPL), must be 24x3 Size
+    % Shape_Para: Shape Parameter for Face(3DMM), must be 199x1 Size
+    % Exp_Para: Expression Parameter for Face(3DMM), must be 29x1 Size
     % shapedirs, posedirs, regJoint, weights, kintree
+    
+    if size(beta, 1) ~= 10
+        error('beta must be 10x1 size');
+    end
+    if size(theta, 1) ~= 24 && size(theta, 2) ~= 3
+        error('beta must be 24x3 size');
+    end
+    if size(Shape_Para, 1) ~= 199
+        error('beta must be 199x1 size');
+    end
+    if size(Exp_Para, 1) ~= 29
+        error('beta must be 29x1 size');
+    end
+    
+    %% 1. Change Face
+    % change the shape of face
     shapeParam = Core.w_shp*Shape_Para;
     shapeParam = reshape(shapeParam, [3 159645/3]);
     shapeParam = shapeParam';
@@ -9,6 +34,7 @@ function [v, v_shaped, v_posed, rot_J_global] = MintModel(Core, beta, theta, Sha
     end
     shapeFace = shapeFace(Core.faceIdx, :);
 
+    % change the expression of face
     expParam = Core.w_exp*Exp_Para;
     expParam = reshape(expParam, [3 159645/3]);
     expParam = expParam';
@@ -20,13 +46,14 @@ function [v, v_shaped, v_posed, rot_J_global] = MintModel(Core, beta, theta, Sha
 
     Core.meanVerts(1:27583, :) = Core.meanVerts(1:27583, :) + shapeFace + expFace;
 
-    %% Shape PCA
+    %% 2. Change Body
+    % Shape PCA
     v_shaped = squeeze(sum(permute(Core.shapeDirs, [3 1 2]) .* beta)) + Core.meanVerts;
 
-    %% Joint Regressor
+    % Joint Regressor
     J = Core.regJoint * v_shaped;   
 
-    %% Pose Regressor
+    % Pose Regressor
     nPosedir = size(Core.poseDirs, 3); % 23 x 9 = 207
     dTheta = zeros(nPosedir, 1);
     for i = 2:length(theta) % Except Global Transformation
@@ -35,7 +62,7 @@ function [v, v_shaped, v_posed, rot_J_global] = MintModel(Core, beta, theta, Sha
     end
     v_posed = squeeze(sum(permute(Core.poseDirs, [3 1 2]) .* dTheta)) + v_shaped;
 
-    %% Linear Blend Skinning
+    % Linear Blend Skinning
     % Get Rotation Matrix along the Joint
     rot_J = zeros(4, 4, length(Core.kinTree)); % 4 x 4 x 24
     rot_J(:, :, 1) = rod(theta(1, :), J(1,:));
@@ -49,21 +76,17 @@ function [v, v_shaped, v_posed, rot_J_global] = MintModel(Core, beta, theta, Sha
         rot_J(:, :, i) = rot_J(:, :, i) - [zeros(4,3) (rot_J(:,:,i) * [J(i,:) 0]')];
     end
 
-    %% Make Skinned Vertices
-    nJoint = size(Core.blendWeights, 2); % 24
-    nVertex = size(Core.blendWeights, 1); % 6890
-
-    % rot_J [(4 x 4) x 24] * weights [(24 x 6890)']
-    % Jtr = squeeze(rot_J_global(1:3, 4, :)); 
-    T = reshape(reshape(rot_J, [16, nJoint]) * Core.blendWeights', [4, 4, nVertex]); % 4 x 4 x 6890
-
-    rest_shape_h = repmat([v_posed ones(length(v_posed),1)], 1, 1, 4); % 6890 x 4 x 4
+    % Make Skinned Vertices
+    nJoint = size(Core.blendWeights, 2);
+    nVertex = size(Core.blendWeights, 1);
+    T = reshape(reshape(rot_J, [16, nJoint]) * Core.blendWeights', [4, 4, nVertex]);
+    rest_shape_h = repmat([v_posed ones(length(v_posed),1)], 1, 1, 4);
     v = squeeze(sum(permute(T, [3 2 1]) .* rest_shape_h, 2))';
     v = v(1:3, :) ./ v(4, :); % Homogenous to Cartesian
     v = v(1:3, :)'; % Final Src vertices set
-
 end
 
+%% Util Function
 function R = rod(V, J)
     if all(V == 0)
         R = eye(3);
