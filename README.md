@@ -1,7 +1,10 @@
 # MintModel
 Parameterized 3D Human Model (3DMM + SMPL)
+
 See the detail of each part
+
 Face: 3DMM, defined by Volker Blanz and Thomas Vetter in "A Morphable Model For The Synthesis Of 3D Faces" (SIGGRAPH 99)
+
 Body: SMPL, https://smpl.is.tue.mpg.de/
 
 ## 1. Predefinition
@@ -26,4 +29,5 @@ v = MintModel(M, beta, theta, Shape_Para, Exp_Para)
 
 ## 3. How to Make this Model?
 Attach 3DMM Face to SMPL Body, with removing face.
+
 See Section 3 of S.Ploumpis et. al. "Towards a complete 3D morphable model of the human head", TPAMI2020
